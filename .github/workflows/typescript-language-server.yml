@@ -1,0 +1,43 @@
+name: Package typescript-language-server
+
+on:
+  push:
+    tags:
+      - typescript-language-server-*
+  workflow_dispatch:
+
+
+jobs:
+  package_all:
+    name: Package Typescript Language Server
+    runs-on: ubuntu-latest
+    permissions: write-all
+    env:
+      TARGETS: latest-linux-x64,latest-linux-arm64,latest-macos-x64,latest-macos-arm64,latest-win-x64
+    steps:
+      - uses: actions/checkout@v3
+      - name: Update Packages
+        run: sudo apt-get update
+      - name: Install Dependencies
+        run: sudo apt-get install yarn binfmt-support qemu-user-static
+      - name: Install ldid
+        # Needed for MacOS signing
+        run: |
+          wget -O ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
+          echo "4b8862b2fefa2cd7fa8f88cb0310779619aeaa8c72d6aff22f019b470f2fa99a  ldid" | sha256sum -c -
+          mv ldid /usr/local/bin/ldid
+          chmod +x /usr/local/bin/ldid
+      - name: Build
+        run: REF=${{ github.ref_name }}; ./scripts/build_typescript-language-server.sh "${REF##*-}" "${TARGETS}"
+      - name: Rename
+        run: |
+          mv output/typescript-language-server-linux-x64 output/typescript-language-server-x86_64-linux
+          mv output/typescript-language-server-linux-arm64 output/typescript-language-server-aarch64-linux
+          mv output/typescript-language-server-macos-x64 output/typescript-language-server-x86_64-darwin
+          mv output/typescript-language-server-macos-arm64 output/typescript-language-server-aarch64-darwin
+          mv output/typescript-language-server-win-x64.exe output/typescript-language-server-x86_64-windows.exe
+      - name: Create Release(s)
+        env: { GITHUB_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release delete -y "${{ github.ref_name }}" || true
+          gh release create -t "${{ github.ref_name }}" "${{ github.ref_name }}" output/*
