@@ -1,0 +1,42 @@
+name: Re-package ldc
+
+on:
+  workflow_dispatch:
+    inputs:
+      ldc_version:
+        type: string
+        required: true
+
+jobs:
+  package_all:
+    name: Package ldc
+    runs-on: ubuntu-latest
+    permissions: write-all
+    env:
+      VERSION: ${{ inputs.ldc_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Packages
+        run: sudo apt-get update -y
+      - name: Install Dependencies
+        run: sudo apt-get install -y atool
+      - name: Get ldc
+        run: |
+          for arch in linux-{aarch64,x86_64} osx-{arm64,x86_64}; do
+            curl -L -o "ldc-${arch}.tar.xz" "https://github.com/ldc-developers/ldc/releases/download/v${VERSION}/ldc2-${VERSION}-${arch}.tar.xz"
+          done
+          for arch in windows-{x86,x64}; do
+            curl -L -o "ldc-${arch}.7z" "https://github.com/ldc-developers/ldc/releases/download/v${VERSION}/ldc2-${VERSION}-${arch}.7z"
+          done
+      - name: Repack ldc
+        run: |
+          arepack -F tar+gz -e *.tar.xz
+          arepack -F zip -e *.7z
+          for archive in *.tar.tar.gz; do
+            mv ${archive} ${archive/.tar.tar/.tar}
+          done
+      - name: Create Release
+        env: { GITHUB_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release delete -y "ldc-$VERSION" || true
+          gh release create -t "ldc-$VERSION" "ldc-$VERSION" ldc-*.tar.gz
